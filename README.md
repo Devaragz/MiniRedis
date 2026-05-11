@@ -2,7 +2,7 @@
 A lightweight C++ LRU cache with MySQL data persistence.
 
 ## Features
-* In-memory LRU caching fro fast data retrieval.
+* In-memory LRU caching for fast data retrieval.
 * MySQL backend for data persistence (ache misses are fetched from DB).
 
 ## Prerequisites
