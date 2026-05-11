@@ -16,7 +16,7 @@ CREATE DATABASE cachedb;
 USE cachedb;
 CREATE TABLE cache_data (cache_key INT PRIMARY KEY, cache_value INT);
 
-#---How to Run---
+# ---How to Run---
 Set your MySQL root password as an environment variable before runnint executable.
 ## Windows (Powershell):
 $env:DB_PASS="your_password"
