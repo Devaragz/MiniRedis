@@ -117,7 +117,10 @@ public:
 MYSQL* setupDatabase(){
     MYSQL *conn=mysql_init(NULL);
     const char* dbPass=getenv("DB_PASS");
-    if(dbPass==nullptr){cout<<"Error:DB_PASS environment variable not set!";}
+    if(dbPass==nullptr){
+        cout<<"Error:DB_PASS environment variable not set!";
+        exit(1);
+    }
 
     if(!mysql_real_connect(conn,"localhost","root",dbPass,"cachedb",3306,NULL,0)){
         cout<<"Connection Failed"<<endl;
