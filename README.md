@@ -3,7 +3,7 @@ A lightweight C++ LRU cache with MySQL data persistence.
 
 ## Features & V2 Updates
 * **Modular Architecture:** cleanly seperated into '.h', '.cpp' & 'main.cpp'.
-* **Memory Safety:** Custom destructorto guarantee zero memory leaks on shutdown.
+* **Memory Safety:** Custom destructor guarantee zero memory leaks on shutdown.
 * **Fast I/O & UI:** ANSI-colored terminal interface & optimized buffer flushes ('\n') for accurate micro-secs benchmarking.
 * **In-memory LRU caching:** Enforced B-Tree indexing (Primary Keys) i MySQL for instant data recovery.
 * **In-memory LRU caching:** For fast data retrieval.
