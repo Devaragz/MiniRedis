@@ -42,6 +42,7 @@ g++ client.cpp -o client -lws2_32
 
 # --How to Run--
 Set your MySQL root password as an environment variable before running the executable.
+
 ###1. Start the Server
 ```powershell
 $env:DB_PASS="your_password"
