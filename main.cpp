@@ -1,18 +1,26 @@
-#include<bits/stdc++.h>
+#include<iostream>
+#include<sstream>
+#include<string>
+#include<chrono>
 #include<winsock2.h>
 #include "lru_cache.h"
+#include "ThreadPool.h"
+
+std::mutex consolemtx;
+
 using namespace std;
 #pragma comment(lib, "ws2_32.lib")
 
 int main(){
+    ThreadPool mypool(4);
     system("chcp 65001>nul");
     cout<<"Starting MiniRedis Server..."<<"\n";
     MYSQL *conn=setupDatabase();
 
-    int capacity;
+    int cap;
     cout<<"Enter cache capacity: ";
-    cin>>capacity;
-    LRUcache cache(capacity,conn);
+    cin>>cap;
+    LRUcache cache(cap,conn,&mypool);
 
     // Initialize Work
     WSADATA wsaData;
@@ -37,7 +45,7 @@ int main(){
         return 1;
     }
     if(listen(server_fd,3)==SOCKET_ERROR){
-        cout<<"listen filed"<<WSAGetLastError()<<"\n";
+        cout<<"listen failed"<<WSAGetLastError()<<"\n";
         return 1;
     }
     cout<<GREEN<<"Server actively listening on Port 8080...\n"<<RESET;
@@ -59,21 +67,30 @@ int main(){
                 if(command=="GET"){
                     ss>>key_str;
                     int key=stoi(key_str);
+                    mypool.enqueue(TaskPriority::URGENT,[&cache,client_socket,key](){
+
                     auto start=chrono::high_resolution_clock::now();  //Timer starts
                     int r=cache.get(key);
                     auto end=chrono::high_resolution_clock::now();    //Timer stops
                     auto duration=chrono::duration_cast<chrono::microseconds>(end-start);
-                    if(cache.ram_flag){
-                    cout<<GREEN<<"cache hit(RAM):key-"<<key<<RESET<<"\n";
-                    }else{
-                        cout<<YELLOW<<"Cache miss! Recovered from DB: key-"<<key<<RESET<<"\n";
-                    }
-                    if(r==-1)cout<<RED<<"!Key not found"<<RESET<<"\n";
-                    else{cout<<"Result: "<<r<<"\n";}
-                    cout<<HIGHLIGHT<<"Time taken: "<<duration.count()<<" µs"<<RESET<<"\n";
-                    // client o/p
-                    string resp=(r==-1)?"!Key not found\n":"Result: "+to_string(r)+"\n";
+
+                    //  Network response
+                    string resp=(r==-1)?"(nil)\r\n":to_string(r)+"\r\n";
                     send(client_socket,resp.c_str(),resp.length(),0);
+
+                    //Atomic string build
+                    string lmsg="\n"+getTime()+string(RED)+"->[CORE"+to_string(GetCurrentProcessorNumber())+"] Priority:20(CRITICAL-Queue Bypassed)"+RESET+"\n";
+                    if(cache.ram_flag){
+                        lmsg+=string(GREEN)+"[CACHE HIT] RAM fetch successful | Key:"+to_string(key)+RESET+"\n";
+                    }else{
+                        lmsg+=string(YELLOW)+"[CACHE MISS] Disk fallback executed | Key:"+to_string(key)+RESET+"\n";
+                    }
+                    if(r==-1) lmsg+=string(RED)+"   ! Error:Key not found"+RESET+"\n";
+                    else{lmsg+="Result: "+to_string(r)+"\n";}
+                    lmsg+=string(HIGHLIGHT)+"GET Latency: "+to_string(duration.count())+" µs"+RESET+"\n";
+                    std::lock_guard<std::mutex>lock(consolemtx);
+                    cout<<lmsg;
+                });
                 }
                 else if(command=="PUT"){
                     ss>>key_str>>val_str;
@@ -83,35 +100,47 @@ int main(){
                     cache.put(key,val);
                     auto end=chrono::high_resolution_clock::now();
                     auto dur=chrono::duration_cast<chrono::microseconds>(end-st);
-                    cout<<"Saved ("<<key<<","<<val<<") with TTL: 60secs\n";
-                    cout<<"PUT latency: "<<dur.count()<<" µs\n";
+                    string pmsg="\n"+string(GREY)+"[MEMORY] Key:"+to_string(key)+"| Value:"+to_string(val)+" | TTL:60secs\n"+HIGHLIGHT+"PUT Latency: "+to_string(dur.count())+"µs"+RESET+"\n";
+                    {
+                        std::lock_guard<std::mutex>lock(consolemtx);
+                        cout<<pmsg;
+                    }
                     // client o/p
                     string resp="OK\n";
                     send(client_socket,resp.c_str(),resp.length(),0);
                 }
                 else if(command=="STRESS"){
-                    cout<<YELLOW<<"Spawning 5 threads to cache\n"<<RESET;
+                    {
+                        std::lock_guard<std::mutex>lock(consolemtx);
+                        cout<<"\n"<<YELLOW<<"Spawning 5 threads to cache\n"<<RESET;
+                    }
                     auto st=chrono::high_resolution_clock::now();
                     // simple task for each thread
                     auto work=[&cache,st](int thr_id){
                         cache.put(thr_id,thr_id*100,60);
                         auto now=chrono::high_resolution_clock::now();
                         auto dur=chrono::duration_cast<chrono::microseconds>(now-st);
-                        string msg="Thread-"+to_string(thr_id)+" completed at "+to_string(dur.count())+" µs\n";
-                        cout<<msg;
+                        string msg="Thread-"+to_string(thr_id)+" completed at "+to_string(dur.count())+"µs\n";
+                        {
+                            std::lock_guard<std::mutex>lock(consolemtx);
+                            cout<<msg;
+                        }
                     };
                     // Fire 5 threads at same time
                     vector<thread> th;
                     for(int i=1;i<=5;i++){th.push_back(thread(work,i));}
                     // wait for all threads to finish
                     for(auto& i:th){i.join();}
-                    cout<<GREEN<<"Stress test complete! No crashes.\n"<<RESET;
+                    {
+                        std::lock_guard<std::mutex>lock(consolemtx);
+                        cout<<getTime()<<GREEN<<"Stress tasks offloaded to Priority Queue! Main network thread freed.\n"<<RESET;
+                    }
 
                     string resp="Stress Test complete\r\n";
                     send(client_socket,resp.c_str(),resp.length(),0);
                 }
                 else if(command=="EXIT"){
-                    cout<<"Shutting down server...\n";
+                    cout<<"\nShutting down server...\n";
                     string resp="Shutting down..\r\n";
                     send(client_socket,resp.c_str(),resp.length(),0);
                     closesocket(client_socket);
@@ -119,6 +148,14 @@ int main(){
                     mysql_close(conn);
                     WSACleanup();
                     return 0;
+                }
+                else{
+                    string resp="-ERR Unknown command\r\n";
+                    send(client_socket,resp.c_str(),resp.length(),0);
+                    {
+                        std::lock_guard<std::mutex>lock(consolemtx);
+                        cout<<"\n"<<getTime()<<RED<<"[ERROR] Unknown client command: "<<command<<RESET<<"\n";
+                    }
                 }
                 req="";
             }

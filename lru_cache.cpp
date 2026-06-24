@@ -1,5 +1,10 @@
 #include "lru_cache.h"
+#include "ThreadPool.h"
+#include<chrono>
 
+extern std::mutex consolemtx;
+
+#include<windows.h>
 // Node Methods
 Node::Node(int k,int v,int ttl){
     key=k;
@@ -10,9 +15,10 @@ Node::Node(int k,int v,int ttl){
 }
 
 // LRUcache Methods
-LRUcache::LRUcache(int c,MYSQL *dbconn){
+LRUcache::LRUcache(int c,MYSQL *dbconn,ThreadPool* tp){
     cap=c;
     conn=dbconn;
+    pool=tp;
     // Initialize dummy nodes
     head=new Node(-1,-1);
     tail=new Node(-1,-1);
@@ -91,14 +97,21 @@ void LRUcache::put(int key,int val,int ttl){
     }
     addNode(new Node(key,val,ttl));
     cachemap[key]=head->next;
+
     // Async disk persistence
-    thread(&LRUcache::syncDB,this,key,val).detach();
+    pool->enqueue(TaskPriority::LOW,[this,key,val](){
+        this->syncDB(key,val);
+    });
 }
 
 void LRUcache::syncDB(int key,int val){
     lock_guard<mutex>lock(dbmx);
     string query="INSERT INTO cache_data (cache_key,cache_value) VALUES("+to_string(key)+","+to_string(val)+") ON DUPLICATE KEY UPDATE cache_value = "+ to_string(val);
     mysql_query(conn,query.c_str());
+
+    string x=getTime()+string(GREEN) +"->[CORE"+to_string(GetCurrentProcessorNumber())+"] Priority:1(LOW)-Asynchronous DB sync | Key:"+to_string(key)+RESET+"\n";
+    std::lock_guard<std::mutex>console_lock(consolemtx);
+    cout<<x;
 }
 
 // Handles cache miss

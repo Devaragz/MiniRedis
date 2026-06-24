@@ -27,7 +27,7 @@ int main(){
     }
 
     cout<<GREEN<<"Connection successful\n"<<RESET;
-    cout<<"Commands: GET <key> | PUT <val> | STRESS | EXIT\n\n";
+    cout<<"Commands: GET <key> | PUT <key> <val> | STRESS | EXIT\n\n";
     string inp;
     char buff[1024]={0};
     while(true){
