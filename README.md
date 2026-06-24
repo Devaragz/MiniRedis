@@ -17,6 +17,7 @@ MiniRedis operates on a decoupled client-server architecture designed for low-la
 * **Memory Safety:** Custom destructor guarantee complete memory deallocation, thread joining, and clean socket closure on seerver shutdown.
 
 ## Telemetry & Execution Proof
+<img width="1416" height="852" alt="terminal_proof" src="https://github.com/user-attachments/assets/1903ee26-ad06-4d79-93e7-e5deafdc3b8f" />
 
 ## •Prerequisites
 * C++ compiler (MinGW/GCC)
