@@ -1,21 +1,22 @@
 # MiniRedis
-A distributed, multithreaded C++ in-memory key-value store with MySQL data persistence and a custom TCP network client.
+A high-performance, non-blocking C++ in-memory key-value caching engine with asynchronous MySQL persistence and a custom TCP network client.
 
 ## --System Architecture & Working--
-MiniRedis operates as a decoupled client-server architecture.
-1. **The Server** listens on TCP port `8080`, handling incoming socket connection.
-2. **The Client** provides an interactive CLI to send commands over the network.
-3. **The Engine** processes requests using a custom DLL + Hash-Map LRU cache for $0(1)$ RAM lookups(~6µs).
-4. **The Fallback:** On cache misses, data is recovered instantly form MySQL(~860µs).
-5. **The Persistence:** New data is saved to MySQL asynchronously via detached background threads to prevent blocking RAM operations.
+MiniRedis operates on a decoupled client-server architecture designed for low-latency memory access and robust disk persistence.
+1. **The Server** listens on TCP port `8080`, handling incoming socket connection via `Winsock2`.
+2. **The Client** A strict, production-accurate CLI mirroring standard `redis-cli` syntax and protocols.
+3. **The Engine** processes requests using a custom DLL + Hash-Map LRU cache for **0(1) RAM lookups(~4µs).
+4. **The Fallback:** On cache misses, data is instantly recovered from MySQL.
+5. **The Persistence (ThreadPool):** New data is saved to memory instantly, while disk syncing is offloaded to a custom asynchronous ThreadPool to prevent blocking the main network thred.
 
-## --Core Features (V3 Final Form)--
-* **Distributed TCP sockets:** Fully functional client-server network using `Winsock2`.
-* **Multithreading & Concurrency:** Handles concurrent requests safely using `std::recursive_mutex` and `std::thread`.
-* **Asynchronous DISK I/O:** MySQL DB syncing happens in the background, isolating disk bottlenecks from the main thread.
-* **Lazy TTL eviction:** Auto-expires stale keys based on customizable Time-To-Live timestamps.
-* **Custom CLI Client:** Replaces raw Telnet with a polished, interactive C++ command-line interface.
-* **Memory Safety:** Custom destructor guarantee complete memory deallocation and clean socket closure on seerver shutdown.
+## --Core Features (V Enterprise Form)--
+* **Asynchronous ThreadPool:** Custom worker thread implementation handling expensive Disk I/O without blocking concurrent RAM operations.
+* **Priority Task Queueing:** Critical cahe misses bypass the standard queue to ensure maximum retrievel speed. 
+* **OS-Level Telemetry:** Real-Time logging of CPU core execution mapping, µs-level latency tracking, and thread-state monitoring.
+* **O(1) LRU Eviction:** Strict memory capacity limits with auto-eviction of the LRU keys.
+* **Memory Safety:** Custom destructor guarantee complete memory deallocation, thread joining, and clean socket closure on seerver shutdown.
+
+## Telemetry & Execution Proof
 
 ## •Prerequisites
 * C++ compiler (MinGW/GCC)
@@ -33,11 +34,11 @@ CREATE TABLE IF NOT EXISTS cache_data (cache_key INT PRIMARY KEY, cache_value IN
 1.Compile the Server:
 Compile the modular files together using GCC. Run this in your terminal(Note:Adjust the -I & -L paths based on your specific MySQL/MariaDB installation):
 ```bash
-g++ main.cpp lru_cache.cpp -o miniredis.exe -I"C:\msys64\mingw64\include\mariadb" -L"C:\msys64\mingw64\lib" -lmariadb -lws2_32
+g++ main.cpp lru_cache.cpp ThreadPool.cpp -o miniredis.exe -I"C:\msys64\mingw64\include\mariadb" -L"C:\msys64\mingw64\lib" -lmariadb -lws2_32
 ```
 2.Compile the client:
 ```bash
-g++ client.cpp -o client -lws2_32
+g++ client.cpp -o client.exe -lws2_32
 ```
 
 # --How to Run--
